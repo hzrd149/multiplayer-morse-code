@@ -1,0 +1,15 @@
+body {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: center;
+}
+#switch {
+  width: 10rem;
+  height: 10rem;
+}
+#graph {
+  width: 100%;
+  max-height: 100px;
+  max-width: 500px;
+}
