@@ -81,7 +81,10 @@ function setState(s = 0) {
 }
 
 let safety = null;
-const low = () => setState(0);
+const low = () => {
+  setState(0);
+  if (safety) clearTimeout(safety);
+};
 const high = () => {
   if (safety) clearTimeout(safety);
   setState(1);
@@ -120,7 +123,10 @@ window.addEventListener("keyup", (event) => {
 });
 
 const button = document.getElementById("switch");
-button.addEventListener("mousedown", () => high());
-button.addEventListener("mouseup", () => low());
-button.addEventListener("touchstart", () => high());
-button.addEventListener("touchend", () => low());
+if (navigator.maxTouchPoints > 0) {
+  button.addEventListener("touchstart", () => high());
+  button.addEventListener("touchend", () => low());
+} else {
+  button.addEventListener("mousedown", () => high());
+  button.addEventListener("mouseup", () => low());
+}
