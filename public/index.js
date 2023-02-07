@@ -1,114 +1,102 @@
 import { setGraphValue } from "./canvas.js";
-const MORSE_CODES = {
-  A: ".-",
-  B: "-...",
-  C: "-.-.",
-  D: "-..",
-  E: ".",
-  F: "..-.",
-  G: "--.",
-  H: "....",
-  I: "..",
-  J: ".---",
-  K: "-.-",
-  L: ".-..",
-  M: "--",
-  N: "-.",
-  O: "---",
-  P: ".--.",
-  Q: "--.-",
-  R: ".-.",
-  S: "...",
-  T: "-",
-  U: "..-",
-  V: "...-",
-  W: ".--",
-  X: "-..-",
-  Y: "-.--",
-  Z: "--..",
-  1: ".----",
-  2: "..---",
-  3: "...--",
-  4: "....-",
-  5: ".....",
-  6: "-....",
-  7: "--...",
-  8: "---..",
-  9: "----.",
-  0: "-----",
-  ".": ".-.-.-",
-  ",": "--..--",
-  "?": "..--..",
-  "'": ".----.",
-  "/": "-..-.",
-  "(": "-.--.",
-  ")": "-.--.-",
-  "&": ".-...",
-  ":": "---...",
-  ";": "-.-.-.",
-  "=": "-...-",
-  "+": ".-.-.",
-  "-": "-....-",
-  _: "..--.-",
-  '"': ".-..-.",
-  $: "...-..-",
-  "!": "-.-.--",
-  "@": ".--.-.",
-};
+const now = () => new Date().valueOf();
+const delay = (t = 100) => new Promise((res) => setTimeout(res, t));
 
 const wsUrl = new URL(location.href);
 wsUrl.protocol = wsUrl.protocol === "http:" ? "ws" : "wss";
 const ws = new WebSocket(wsUrl.toString());
 
-ws.onmessage = ({ data }) => setSignal(parseInt(data) || 0);
+ws.onmessage = ({ data }) => {
+  const sequence = JSON.parse(data);
+  playSequence(sequence);
+};
 
-let cache = null;
-function getGain() {
-  if (!cache) {
-    const context = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    gain.gain.value = 0;
-    oscillator.frequency.value = 600;
-    oscillator.connect(gain);
+const context = new AudioContext();
+const oscillator = context.createOscillator();
+const gainStep = context.createGain();
+gainStep.gain.value = 0;
+oscillator.frequency.value = 600;
+oscillator.connect(gainStep);
 
-    oscillator.start(0);
-    gain.connect(context.destination);
+oscillator.start(0);
+gainStep.connect(context.destination);
 
-    cache = gain;
+function resumeAudio() {
+  if (context.state === "suspended") {
+    context.resume();
   }
-
-  return cache;
 }
 
 function setSignal(v = 0) {
-  setGain(v);
+  resumeAudio();
+  gainStep.gain.value = v;
   setGraphValue(v);
+}
+async function playSequence(sequence = []) {
+  let v = 1;
+  setSignal(1);
+  for (const t of sequence) {
+    await delay(t);
+    v = v ? 0 : 1;
+    setSignal(v);
+  }
+  setSignal(0);
+}
+
+let queue = [];
+let recording = false;
+const flush = () => {
+  if (queue.length > 0) {
+    console.log(queue);
+    ws.send(JSON.stringify(queue));
+  }
+  queue = [];
+  recording = false;
+};
+
+let flushTimeout = null;
+const pushTimeToQueue = (t) => {
+  recording = true;
+  queue.push(t);
+
+  if (flushTimeout) clearTimeout(flushTimeout);
+  flushTimeout = setTimeout(flush, 600);
+};
+
+let lastTime = now();
+const toggleSignal = () => {
+  const t = now();
+  if (recording) pushTimeToQueue(t - lastTime);
+  recording = true;
+  lastTime = t;
+};
+
+let state = 0;
+function setState(s = 0) {
+  if (s !== state) {
+    state = s;
+    toggleSignal();
+    setSignal(state);
+  }
 }
 
 let safety = null;
-const setGain = (v = 0) => {
-  if (safety) clearTimeout(safety);
-  const gain = getGain();
-  gain.gain.value = v;
-
-  // if 1 is set. send a 0 at least 500ms after
-  if (v === 1) {
-    safety = setTimeout(() => (gain.gain.value = 0), 500);
-  }
-};
-
+const low = () => setState(0);
 const high = () => {
-  ws.send(String(1));
-  setSignal(1);
-};
-const low = () => {
-  ws.send(String(0));
-  setSignal(0);
+  if (safety) clearTimeout(safety);
+  setState(1);
+  safety = setTimeout(low, 500);
 };
 
-window.addEventListener("mousedown", getGain, { once: true });
-window.addEventListener("keydown", getGain, { once: true });
+// const dotTime = 80;
+// const dot = () => {
+//   pushTimeToQueue(dotTime);
+//   pushTimeToQueue(dotTime);
+// };
+// const dash = () => {
+//   pushTimeToQueue(dotTime * 3);
+//   pushTimeToQueue(dotTime);
+// };
 
 // simple switch
 let keyDown = false;
@@ -119,21 +107,15 @@ window.addEventListener("keydown", (event) => {
       case "KeyC":
         high();
         break;
-      case "KeyX":
-        high();
-        setTimeout(() => low(), 80);
-        break;
-      case "KeyZ":
-        high();
-        setTimeout(() => low(), 80 * 3);
-        break;
     }
   }
 });
 window.addEventListener("keyup", (event) => {
   keyDown = false;
-  if (event.code === "KeyC") {
-    low();
+  switch (event.code) {
+    case "KeyC":
+      low();
+      break;
   }
 });
 
