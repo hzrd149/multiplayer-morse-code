@@ -69,7 +69,7 @@ function getGain() {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     gain.gain.value = 0;
-    oscillator.frequency.value = 700;
+    oscillator.frequency.value = 600;
     oscillator.connect(gain);
 
     oscillator.start(0);
